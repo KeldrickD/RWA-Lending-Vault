@@ -38,6 +38,43 @@ import './App.css'
 const GUESTBOOK_ADDRESS = (deployed.guestbookAddress || '') as `0x${string}`
 const VAULT_ADDRESS = (deployed.vaultAddress || '') as `0x${string}`
 const TSLA_ADDRESS = STOCK_TOKENS.find((t) => t.symbol === 'TSLA')!.address
+const EXPLORER_TX = (hash: string) => `https://explorer.testnet.chain.robinhood.com/tx/${hash}`
+
+function TxToaster() {
+  const [toast, setToast] = useState<{ msg: string; hash?: string; isError?: boolean } | null>(null)
+  useEffect(() => {
+    const onSuccess = (e: Event) => {
+      const d = (e as CustomEvent<{ message: string; hash?: string }>).detail
+      setToast({ msg: d.message, hash: d.hash, isError: false })
+    }
+    const onError = (e: Event) => {
+      const d = (e as CustomEvent<{ message: string }>).detail
+      setToast({ msg: d.message, isError: true })
+    }
+    window.addEventListener('tx-success', onSuccess)
+    window.addEventListener('tx-error', onError)
+    return () => {
+      window.removeEventListener('tx-success', onSuccess)
+      window.removeEventListener('tx-error', onError)
+    }
+  }, [])
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 5000)
+    return () => clearTimeout(t)
+  }, [toast])
+  if (!toast) return null
+  return (
+    <div className={`tx-toast ${toast.isError ? 'tx-toast-error' : ''}`}>
+      <span>{toast.msg}</span>
+      {toast.hash && !toast.isError && (
+        <a href={EXPLORER_TX(toast.hash)} target="_blank" rel="noopener noreferrer" className="tx-toast-link">
+          View tx →
+        </a>
+      )}
+    </div>
+  )
+}
 
 function formatAmount(n: number, decimals = 4): string {
   if (n >= 1000) return n.toFixed(0)
@@ -153,6 +190,15 @@ function AuthorPortfolio({ address }: { address: `0x${string}` }) {
   )
 }
 
+function formatRelativeTime(ts: number): string {
+  const sec = Math.floor(Date.now() / 1000 - ts)
+  if (sec < 60) return 'just now'
+  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`
+  if (sec < 86400) return `${Math.floor(sec / 3600)} hr ago`
+  if (sec < 604800) return `${Math.floor(sec / 86400)} days ago`
+  return new Date(ts * 1000).toLocaleDateString()
+}
+
 function MessageItem({ id }: { id: number }) {
   const { data } = useReadContract({
     address: GUESTBOOK_ADDRESS || undefined,
@@ -162,21 +208,23 @@ function MessageItem({ id }: { id: number }) {
   })
   if (!data) return null
   const [author, content, timestamp] = data
-  const date = new Date(Number(timestamp) * 1000).toLocaleString()
+  const ts = Number(timestamp)
+  const relative = formatRelativeTime(ts)
   return (
     <div className="message-item">
       <p className="message-content">{content}</p>
       <div className="message-meta">
-        <span>{author.slice(0, 10)}…{author.slice(-6)} · {date}</span>
+        <span className="message-author">{author.slice(0, 6)}…{author.slice(-4)}</span>
+        <span className="message-time">{relative}</span>
         <AuthorPortfolio address={author} />
       </div>
     </div>
   )
 }
 
-function TokenBalanceRow({ address, symbol, priceUsd }: { address: `0x${string}`; symbol: string; priceUsd?: number }) {
+function TokenBalanceRow({ address, symbol, priceUsd, isLoading }: { address: `0x${string}`; symbol: string; priceUsd?: number; isLoading?: boolean }) {
   const { address: userAddress } = useAccount()
-  const { data } = useReadContract({
+  const { data, isLoading: balLoading } = useReadContract({
     address,
     abi: erc20Abi,
     functionName: 'balanceOf',
@@ -184,13 +232,26 @@ function TokenBalanceRow({ address, symbol, priceUsd }: { address: `0x${string}`
   })
   const n = data ? parseFloat(formatUnits(data, 18)) : 0
   const usdValue = priceUsd != null && priceUsd > 0 ? n * priceUsd : null
+  if (balLoading || isLoading) {
+    return (
+      <div className="token-row token-row-skeleton">
+        <span className="token-symbol">{symbol}</span>
+        <span className="token-balance skeleton-text">—</span>
+      </div>
+    )
+  }
   return (
     <div className="token-row">
       <span className="token-symbol">{symbol}</span>
       <span className="token-balance">
         {n >= 0.0001 ? (n >= 1 ? n.toFixed(2) : n.toFixed(4)) : '0'}
+        {priceUsd != null && priceUsd > 0 && (
+          <span className="token-price-hint" title={`Oracle: ~$${priceUsd >= 1 ? priceUsd.toFixed(0) : priceUsd.toFixed(2)} ea`}>
+            (~${priceUsd >= 1 ? priceUsd.toFixed(0) : priceUsd.toFixed(2)} ea)
+          </span>
+        )}
         {usdValue != null && usdValue >= 0.01 && (
-          <span className="token-usd"> (${usdValue >= 1 ? usdValue.toFixed(0) : usdValue.toFixed(2)} USD)</span>
+          <span className="token-usd"> ${usdValue >= 1 ? usdValue.toFixed(0) : usdValue.toFixed(2)} USD</span>
         )}
       </span>
     </div>
@@ -198,7 +259,7 @@ function TokenBalanceRow({ address, symbol, priceUsd }: { address: `0x${string}`
 }
 
 function PortfolioWithPrices({ ethBalance }: { ethBalance: { value: bigint } | undefined }) {
-  const { data: tokenPrices } = useReadContracts({
+  const { data: tokenPrices, isLoading: pricesLoading } = useReadContracts({
     contracts: VAULT_V4 && VAULT_ADDRESS
       ? STOCK_TOKENS.map((t) => ({
           address: VAULT_ADDRESS,
@@ -235,10 +296,21 @@ function PortfolioWithPrices({ ethBalance }: { ethBalance: { value: bigint } | u
           return sum + n * p
         }, 0)
       : 0
+  const totalStockBal = stockBalances
+    ? STOCK_TOKENS.reduce((sum, _, i) => {
+        const bal = stockBalances[i] as { result?: bigint } | undefined
+        return sum + (bal?.result ? parseFloat(formatUnits(bal.result, 18)) : 0)
+      }, 0)
+    : 0
   return (
     <>
       {totalUsd >= 0.01 && (
-        <p className="portfolio-total">Total value: <strong>${totalUsd >= 1 ? totalUsd.toFixed(0) : totalUsd.toFixed(2)} USD</strong></p>
+        <p className="portfolio-total">Total value: <strong>~${totalUsd >= 1 ? totalUsd.toFixed(0) : totalUsd.toFixed(2)} USD</strong></p>
+      )}
+      {totalStockBal < 0.1 && address && (
+        <p className="portfolio-nudge">
+          <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">Claim test tokens from faucet</a> to test higher borrows.
+        </p>
       )}
       <div className="balance-section">
         <div className="token-row">
@@ -248,7 +320,7 @@ function PortfolioWithPrices({ ethBalance }: { ethBalance: { value: bigint } | u
       </div>
       <div className="balance-section">
         {STOCK_TOKENS.map((t) => (
-          <TokenBalanceRow key={t.symbol} address={t.address} symbol={t.symbol} priceUsd={prices[t.symbol]} />
+          <TokenBalanceRow key={t.symbol} address={t.address} symbol={t.symbol} priceUsd={prices[t.symbol]} isLoading={VAULT_V4 && pricesLoading} />
         ))}
       </div>
     </>
@@ -368,8 +440,23 @@ function LendingVaultCard() {
       : [],
   })
   const isVaultOwner = vaultOwner && address?.toLowerCase() === (vaultOwner as string).toLowerCase()
+  const lastActionRef = useRef<string>('')
   const { writeContract, isPending, error, data: writeTxHash } = useWriteContract()
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: writeTxHash })
+  const { isLoading: isConfirming, status } = useWaitForTransactionReceipt({ hash: writeTxHash })
+  const lastTxRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (status === 'success' && writeTxHash && lastTxRef.current !== writeTxHash) {
+      lastTxRef.current = writeTxHash
+      const msg = lastActionRef.current || 'Transaction successful!'
+      window.dispatchEvent(new CustomEvent('tx-success', { detail: { message: msg, hash: writeTxHash } }))
+    }
+  }, [status, writeTxHash])
+  useEffect(() => {
+    if (error) {
+      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.shortMessage || error.message || 'Transaction failed'
+      window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
+    }
+  }, [error])
 
   const coll = VAULT_V3_OR_V4
     ? (collateralBalancesV3?.reduce((sum, r) => sum + Number((r as { result?: bigint }).result ?? 0), 0) ?? 0)
@@ -408,6 +495,7 @@ function LendingVaultCard() {
 
   const handleApprove = () => {
     if (!depositAmt || parseFloat(depositAmt) <= 0) return
+    lastActionRef.current = 'Approval successful!'
     const tokenAddr = VAULT_V3_OR_V4 ? depositToken.address : TSLA_ADDRESS
     writeContract({
       address: tokenAddr,
@@ -420,6 +508,7 @@ function LendingVaultCard() {
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!depositAmt || parseFloat(depositAmt) <= 0) return
+    lastActionRef.current = 'Deposit successful!'
     writeContract({
       address: VAULT_ADDRESS,
       abi: vaultAbiToUse,
@@ -431,6 +520,7 @@ function LendingVaultCard() {
   const handleBorrow = (e: React.FormEvent) => {
     e.preventDefault()
     if (!borrowAmt || parseFloat(borrowAmt) <= 0) return
+    lastActionRef.current = 'Borrow successful!'
     writeContract({
       address: VAULT_ADDRESS,
       abi: vaultAbiToUse,
@@ -442,6 +532,7 @@ function LendingVaultCard() {
   const handleRepay = (e: React.FormEvent) => {
     e.preventDefault()
     if (!repayAmt || parseFloat(repayAmt) <= 0) return
+    lastActionRef.current = 'Repay successful!'
     writeContract({
       address: VAULT_ADDRESS,
       abi: vaultAbiToUse,
@@ -453,6 +544,7 @@ function LendingVaultCard() {
   const handleFundPool = (e: React.FormEvent) => {
     e.preventDefault()
     if (!fundAmt || parseFloat(fundAmt) <= 0) return
+    lastActionRef.current = 'Supply successful!'
     writeContract({
       address: VAULT_ADDRESS,
       abi: vaultAbiToUse,
@@ -464,6 +556,7 @@ function LendingVaultCard() {
   const handleSimulatePrice = (e: React.FormEvent) => {
     e.preventDefault()
     if (!simulatePrice || parseFloat(simulatePrice) <= 0 || !mockOracles?.[simulateToken.symbol]) return
+    lastActionRef.current = 'Price updated!'
     writeContract({
       address: mockOracles[simulateToken.symbol] as `0x${string}`,
       abi: mockOracleAbi,
@@ -475,6 +568,7 @@ function LendingVaultCard() {
   const handleWithdraw = (e: React.FormEvent) => {
     e.preventDefault()
     if (!withdrawAmt || parseFloat(withdrawAmt) <= 0) return
+    lastActionRef.current = 'Withdraw successful!'
     writeContract({
       address: VAULT_ADDRESS,
       abi: vaultAbiToUse,
@@ -490,39 +584,54 @@ function LendingVaultCard() {
       <h2>RWA Lending{VAULT_V4 ? ' V4 · Oracle-Ready' : VAULT_V3 ? ' V3' : VAULT_V2 ? ' V2' : ''}</h2>
       <p className="hint">
         {VAULT_V3_OR_V4
-          ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle feeds' : ''}`
+          ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Mock Chainlink feeds active — ready for real feeds' : ''}`
           : 'Deposit TSLA as collateral, borrow ETH (50% LTV)'}
       </p>
       {!isVaultOwner && vaultOwner && (
         <p className="owner-badge" title="Only the vault owner can fund the lending pool">Vault owner: {String(vaultOwner).slice(0, 6)}…{String(vaultOwner).slice(-4)}</p>
       )}
-      {!isVaultOwner && VAULT_V3_OR_V4 && (
-        <p className="lender-note" title="Lenders earn Supply APR from borrower interest">
-          Lending pool is owner-funded on testnet — public supply coming in future version.
-        </p>
-      )}
-      {isVaultOwner && (
+      <div className={`supply-section ${!isVaultOwner ? 'supply-disabled' : ''}`}>
+        <div className="supply-header">
+          <h3>Supply ETH to Pool</h3>
+          {!isVaultOwner && <span className="owner-only-badge" title="Only the vault owner can supply ETH">Owner only</span>}
+          {VAULT_V3_OR_V4 && borrowRate !== undefined && utilization !== undefined && (
+            <span className="supply-apr-badge" title="Earn from borrower interest – increases as utilization rises">
+              Supply APR: {((Number(borrowRate) * Number(utilization)) / 10000).toFixed(2)}%
+            </span>
+          )}
+        </div>
+        {!isVaultOwner && (
+          <p className="lender-note" title="Lenders earn Supply APR from borrower interest">
+            Public supply coming soon — owner funding active now.
+          </p>
+        )}
         <form onSubmit={handleFundPool} className="lending-form fund-form">
-          <label>Fund pool (owner only)</label>
+          <label>Earn Supply APR from borrower interest</label>
           <div className="input-with-max">
             <input
               type="number"
               placeholder="ETH amount"
               value={fundAmt}
               onChange={(e) => setFundAmt(e.target.value)}
-              step="any"
+              step="0.001"
+              disabled={!isVaultOwner}
             />
-            {ethBalance && (
+            {ethBalance && isVaultOwner && (
               <button type="button" className="btn-max" onClick={() => setFundAmt(formatUnits(ethBalance.value, 18))}>
                 Max
               </button>
             )}
           </div>
-          <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !fundAmt}>
-            Deposit ETH to pool
+          {isVaultOwner && fundAmt && parseFloat(fundAmt) > 0 && borrowRate !== undefined && utilization !== undefined && (
+            <p className="supply-preview">
+              Supplying {fundAmt} ETH → Est. daily yield: ~{((parseFloat(fundAmt) * (Number(borrowRate) * Number(utilization)) / 10000 / 100) / 365).toFixed(6)} ETH at current APR
+            </p>
+          )}
+          <button type="submit" className="btn btn-primary" disabled={!isVaultOwner || isPending || isConfirming || !fundAmt} title={!isVaultOwner ? 'Only the vault owner can supply ETH' : ''}>
+            Supply ETH
           </button>
         </form>
-      )}
+      </div>
       <div className="lending-stats">
         <p>Pool: {poolBal ? formatAmount(parseFloat(formatUnits(poolBal, 18))) : '0'} ETH</p>
         {VAULT_V3_OR_V4 && borrowRate !== undefined && (
@@ -534,11 +643,14 @@ function LendingVaultCard() {
           </p>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && (
-          <div className={`utilization-row ${Number(utilization) > 8000 ? 'utilization-high' : ''}`}>
+          <div className={`utilization-row ${Number(utilization) > 8000 ? 'utilization-high' : Number(utilization) > 5000 ? 'utilization-mid' : ''}`}>
             <p className={Number(utilization) > 8000 ? 'utilization-high' : Number(utilization) === 0 ? 'utilization-low' : ''}>
               Utilization: {(Number(utilization) / 100).toFixed(1)}%
             </p>
-            <div className="util-bar"><div className="util-fill" style={{ width: `${Math.min(Number(utilization) / 100, 100)}%` }} /></div>
+            <div className="util-bar">
+              <div className="util-fill util-fill-gradient" style={{ width: `${Math.min(Number(utilization) / 100, 100)}%` }} />
+              <span className="util-bar-label">{(Number(utilization) / 100).toFixed(1)}%</span>
+            </div>
           </div>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && Number(utilization) === 0 && poolBal && Number(poolBal) > 0 && (
@@ -555,9 +667,14 @@ function LendingVaultCard() {
         )}
         <p>Max borrow: {formatAmount(max / 1e18)} ETH</p>
       </div>
+      {hasLoan && healthFactor !== undefined && Number(healthFactor) < 125 && (
+        <p className="hf-risk-banner">
+          Position at risk — add collateral or repay to avoid liquidation.
+        </p>
+      )}
       {VAULT_V4 && tokenPrices && tokenPrices.length > 0 && (
         <div className="lending-stats oracle-status">
-          <p className="oracle-label">Oracle status (mock feeds)</p>
+          <p className="oracle-label">Mock Chainlink feeds active</p>
           <div className="oracle-prices">
             {STOCK_TOKENS.map((t, i) => {
               const r = tokenPrices[i] as { result?: bigint } | undefined
@@ -664,11 +781,19 @@ function LendingVaultCard() {
           <p className="borrow-validation-error">Exceeds max borrow limit ({formatAmount(max / 1e18)} ETH)</p>
         )}
         {borrowPreviewHF !== null && parseFloat(borrowAmt || '0') <= max / 1e18 && (
-          <p className={`borrow-preview ${getHFClass(borrowPreviewHF)}`}>
-            <span className="hf-icon">{borrowPreviewHF >= 125 ? '🛡' : '⚠️'}</span>
-            Borrowing {borrowAmt} ETH → HF: {(borrowPreviewHF / 100).toFixed(1)}%
-            {borrowPreviewHF < 100 ? ' (liquidatable)' : borrowPreviewHF < 125 ? ' · At risk if price drops' : ' Healthy'}
-          </p>
+          <>
+            <p className={`borrow-preview borrow-preview-bold ${getHFClass(borrowPreviewHF)}`}>
+              Borrowing {borrowAmt} ETH →
+              <span className="hf-display">
+                <span className="hf-icon">{borrowPreviewHF >= 125 ? '🛡' : '⚠️'}</span>
+                HF: {(borrowPreviewHF / 100).toFixed(1)}%
+                {borrowPreviewHF < 100 ? ' (liquidatable)' : borrowPreviewHF < 125 ? ' · At risk' : ' Healthy'}
+              </span>
+            </p>
+            {borrowPreviewHF < 125 && parseFloat(borrowAmt || '0') > 0 && (
+              <p className="hf-risk-banner">Position at risk — add collateral or repay to avoid liquidation.</p>
+            )}
+          </>
         )}
         {max > 0 && (
           <input
@@ -755,7 +880,20 @@ function TransferPanel({ onClose }: { onClose: () => void }) {
   const [to, setTo] = useState('')
   const [amount, setAmount] = useState('')
   const { writeContract, isPending, error, data: txHash } = useWriteContract()
-  const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: txHash })
+  const { isLoading: isConfirming, status } = useWaitForTransactionReceipt({ hash: txHash })
+  const lastTxRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (status === 'success' && txHash && lastTxRef.current !== txHash) {
+      lastTxRef.current = txHash
+      window.dispatchEvent(new CustomEvent('tx-success', { detail: { message: 'Transfer successful!', hash: txHash } }))
+    }
+  }, [status, txHash])
+  useEffect(() => {
+    if (error) {
+      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.shortMessage || error.message || 'Transfer failed'
+      window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
+    }
+  }, [error])
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
@@ -856,8 +994,15 @@ function App() {
     if (status === 'success' && txHash && lastTxRef.current !== txHash) {
       lastTxRef.current = txHash
       refetchTotal()
+      window.dispatchEvent(new CustomEvent('tx-success', { detail: { message: 'Post successful!', hash: txHash } }))
     }
   }, [status, txHash, refetchTotal])
+  useEffect(() => {
+    if (writeError) {
+      const msg = writeError.message?.includes('insufficient') ? 'Insufficient balance' : writeError.message?.includes('rejected') ? 'Transaction rejected' : writeError.shortMessage || writeError.message || 'Post failed'
+      window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
+    }
+  }, [writeError])
 
   const isOnRobinhood = chain?.id === robinhoodChain.id
 
@@ -901,6 +1046,7 @@ function App() {
 
   return (
     <div className="app">
+      <TxToaster />
       <header className="header">
         <div className="header-row">
           <h1>Robinhood Chain</h1>
@@ -1048,7 +1194,9 @@ function App() {
                   disabled={!isOnRobinhood || isWritePending || isConfirming}
                 />
                 <div className="form-footer">
-                  <span className={`char-count ${message.length > 250 ? 'char-count-warn' : ''}`}>{message.length}/280</span>
+                  <span className={`char-count ${message.length > 250 ? 'char-count-warn' : ''}`} title={message.length > 250 ? `${280 - message.length} remaining` : ''}>
+                    {message.length > 250 ? `${280 - message.length} remaining` : `${message.length}/280`}
+                  </span>
                   <button
                     type="submit"
                     className="btn btn-primary"
@@ -1069,11 +1217,16 @@ function App() {
                   View transaction →
                 </a>
               )}
-              <h3>{total === 0 ? 'Be the first to post a lending tip!' : `${total} message${total !== 1 ? 's' : ''} on-chain`}</h3>
+              <div className="feed-header">
+                <h3>{total === 0 ? 'Be the first to post a lending tip!' : `${total} message${total !== 1 ? 's' : ''} on-chain`}</h3>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => refetchTotal()} title="Refresh feed">↻</button>
+              </div>
               <div className="message-list">
-                {Array.from({ length: total }, (_, i) => (
-                  <MessageItem key={i} id={i} />
-                ))}
+                {Array.from({ length: Math.min(total, 10) }, (_, i) => total - 1 - i)
+                  .filter((id) => id >= 0)
+                  .map((id) => (
+                    <MessageItem key={id} id={id} />
+                  ))}
               </div>
             </section>
             )}

@@ -1,5 +1,1 @@
-{
-  "guestbookAddress": "0xb97abf92a9ebb99d8b8d3236586e43fec0b0cf19",
-  "vaultAddress": "0x061c8929f4985785c4a039cb824e66af97a1bdfa",
-  "vaultVersion": 3
-}
+{"guestbookAddress":"0xb97abf92a9ebb99d8b8d3236586e43fec0b0cf19","vaultAddress":"0x061c8929f4985785c4a039cb824e66af97a1bdfa","vaultVersion":4}

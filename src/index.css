@@ -49,6 +49,11 @@ body {
 :root.light-mode .health-ok,
 :root.light-mode .network-ok { color: #0d9488; }
 :root.light-mode .health-warning { color: #d97706; }
+:root.light-mode .tx-toast {
+  background: rgba(13, 148, 136, 0.95);
+  color: #fff;
+}
+:root.light-mode .tx-toast-link { color: #fff; }
 :root.light-mode .lending-form input,
 :root.light-mode .post-form textarea {
   background: rgba(0, 0, 0, 0.04);
