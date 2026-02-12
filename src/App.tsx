@@ -453,7 +453,7 @@ function LendingVaultCard() {
   }, [status, writeTxHash])
   useEffect(() => {
     if (error) {
-      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.shortMessage || error.message || 'Transaction failed'
+      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.message || 'Transaction failed'
       window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
     }
   }, [error])
@@ -890,7 +890,7 @@ function TransferPanel({ onClose }: { onClose: () => void }) {
   }, [status, txHash])
   useEffect(() => {
     if (error) {
-      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.shortMessage || error.message || 'Transfer failed'
+      const msg = error.message?.includes('insufficient') ? 'Insufficient balance' : error.message?.includes('rejected') ? 'Transaction rejected' : error.message || 'Transfer failed'
       window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
     }
   }, [error])
@@ -999,7 +999,7 @@ function App() {
   }, [status, txHash, refetchTotal])
   useEffect(() => {
     if (writeError) {
-      const msg = writeError.message?.includes('insufficient') ? 'Insufficient balance' : writeError.message?.includes('rejected') ? 'Transaction rejected' : writeError.shortMessage || writeError.message || 'Post failed'
+      const msg = writeError.message?.includes('insufficient') ? 'Insufficient balance' : writeError.message?.includes('rejected') ? 'Transaction rejected' : writeError.message || 'Post failed'
       window.dispatchEvent(new CustomEvent('tx-error', { detail: { message: msg } }))
     }
   }, [writeError])
