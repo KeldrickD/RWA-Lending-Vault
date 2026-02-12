@@ -334,6 +334,9 @@
 .lending-card .loan-amt { color: #ff9f43; }
 .lending-card .health-ok { color: #21ce99; }
 .lending-card .health-danger { color: #ff6b6b; font-weight: 600; }
+.lending-card .oracle-status { margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); }
+.lending-card .oracle-label { font-size: 0.75rem; text-transform: uppercase; color: #6b7fa3; margin-bottom: 0.35rem !important; }
+.lending-card .oracle-prices { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.85rem; }
 .lending-form {
   margin-bottom: 1rem;
 }

@@ -11,6 +11,8 @@
     "deploy": "tsx scripts/deploy.ts",
     "deploy:vault": "tsx scripts/deploy-vault.ts",
     "deploy:vault-v2": "tsx scripts/deploy-vault-v2.ts",
+    "deploy:vault-v3": "tsx scripts/deploy-vault-v3.ts",
+    "deploy:vault-v4": "tsx scripts/deploy-vault-v4.ts",
     "fund:vault": "tsx scripts/fund-vault.ts"
   },
   "dependencies": {

@@ -14,7 +14,7 @@ DeFi app on Robinhood Chain Testnet with **RWA Lending** (deposit TSLA, borrow E
 | Contract | Address |
 |----------|---------|
 | Guestbook | See `src/config/deployed.json` |
-| RWALendingVault (V2) | Oracle + liquidation | See `src/config/deployed.json` |
+| RWALendingVault (V1/V2/V3/V4) | See `src/config/deployed.json` |
 
 ## Quick start
 
@@ -24,6 +24,8 @@ DeFi app on Robinhood Chain Testnet with **RWA Lending** (deposit TSLA, borrow E
 npm run deploy          # Guestbook
 npm run deploy:vault    # RWA Lending Vault V1 (basic)
 npm run deploy:vault-v2 # RWA Lending Vault V2 (oracle + liquidation)
+npm run deploy:vault-v3 # RWA Lending Vault V3 (rates + multi-asset)
+npm run deploy:vault-v4 # RWA Lending Vault V4 (mock oracles + simulate price)
 ```
 
 ### 2. Fund the lending pool (owner only)
@@ -77,6 +79,24 @@ V2 adds production-ready features:
 - **Health factor**: Position becomes liquidatable when collateral value drops below 125% of debt
 - **Automated liquidation**: Anyone can liquidate underwater loans; liquidator receives 5% bonus
 - **Configurable params**: `liquidationThreshold` (default 125), `liquidationBonus` (default 5)
+
+## Vault V3: Dynamic Rates + Multi-Asset
+
+V3 adds production-grade upgrades (also in V4):
+
+- **Utilization-based interest rates**: Borrow rate varies with pool utilization (base 2%, slopes 8%/40%, optimal 80%). Lenders earn yield as borrowers pay interest.
+- **Multi-asset collateral**: Deposit TSLA, AMZN, PLTR, NFLX, or AMD as collateral—all supported testnet stock tokens.
+- **Per-asset oracles**: Optional Chainlink feeds per token (`address(0)` = 1:1 testnet fallback).
+- **ReentrancyGuard**, events, and configurable rate params via `setRateParams()`.
+
+## Vault V4: Oracle-Ready with Mock Feeds
+
+V4 extends V3 with:
+
+- **Mock Chainlink oracles**: Deploys per-token mock feeds (TSLA, AMZN, PLTR, NFLX, AMD) with configurable prices
+- **Stale price detection**: Falls back to 1:1 if feed is older than 1 hour
+- **setPriceFeed()**: Owner can update oracle addresses post-deploy (mainnet migration)
+- **Simulate price drops**: Use the "Set price" UI to change mock prices → test liquidations
 
 ## Docs
 

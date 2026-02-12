@@ -21,9 +21,17 @@ import {
 import { STOCK_TOKENS } from './config/tokens'
 import { guestbookAbi } from './config/guestbookAbi'
 import { vaultAbi } from './config/vaultAbi'
+import { vaultAbiV3 } from './config/vaultAbiV3'
+import { vaultAbiV4 } from './config/vaultAbiV4'
+import { mockOracleAbi } from './config/mockOracleAbi'
 import deployed from './config/deployed.json'
 
 const VAULT_V2 = deployed.vaultVersion === 2
+const VAULT_V3 = deployed.vaultVersion === 3
+const VAULT_V4 = deployed.vaultVersion === 4
+const VAULT_V3_OR_V4 = VAULT_V3 || VAULT_V4
+const vaultAbiToUse = VAULT_V4 ? vaultAbiV4 : VAULT_V3 ? vaultAbiV3 : vaultAbi
+const mockOracles = (deployed as { mockOracles?: Record<string, string> }).mockOracles
 import './App.css'
 
 const GUESTBOOK_ADDRESS = (deployed.guestbookAddress || '') as `0x${string}`
@@ -98,42 +106,78 @@ function TokenBalanceRow({ address, symbol }: { address: `0x${string}`; symbol: 
 
 function LendingVaultCard() {
   const { address } = useAccount()
+  const [depositToken, setDepositToken] = useState<(typeof STOCK_TOKENS)[number]>(STOCK_TOKENS[0])
+  const [withdrawToken, setWithdrawToken] = useState<(typeof STOCK_TOKENS)[number]>(STOCK_TOKENS[0])
+
   const { data: poolBal } = useReadContract({
     address: VAULT_ADDRESS || undefined,
-    abi: vaultAbi,
+    abi: vaultAbiToUse,
     functionName: 'poolBalance',
   })
   const { data: collateral } = useReadContract({
     address: VAULT_ADDRESS || undefined,
     abi: vaultAbi,
     functionName: 'collateralBalances',
+    args: address && !VAULT_V3_OR_V4 ? [address] : undefined,
+  })
+  const { data: collateralValueUSD } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getCollateralValueUSD',
     args: address ? [address] : undefined,
+  })
+  const { data: collateralBalancesV3 } = useReadContracts({
+    contracts: VAULT_V3_OR_V4 && address
+      ? STOCK_TOKENS.map((t) => ({
+          address: VAULT_ADDRESS,
+          abi: vaultAbiToUse,
+          functionName: 'getCollateralBalance' as const,
+          args: [address, t.address],
+        }))
+      : [],
   })
   const { data: loanDetails } = useReadContract({
     address: VAULT_ADDRESS || undefined,
-    abi: vaultAbi,
+    abi: vaultAbiToUse,
     functionName: 'getLoanDetails',
+    args: address ? [address] : undefined,
+  })
+  const { data: loanDebtAccrued } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getLoanDebtWithAccrued',
     args: address ? [address] : undefined,
   })
   const { data: maxBorrow } = useReadContract({
     address: VAULT_ADDRESS || undefined,
-    abi: vaultAbi,
+    abi: vaultAbiToUse,
     functionName: 'getMaxBorrow',
     args: address ? [address] : undefined,
   })
   const { data: healthFactor } = useReadContract({
-    address: VAULT_ADDRESS && VAULT_V2 ? VAULT_ADDRESS : undefined,
-    abi: vaultAbi,
-    functionName: 'getHealthFactor' as never,
+    address: VAULT_ADDRESS && (VAULT_V2 || VAULT_V3_OR_V4) ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getHealthFactor',
     args: address ? [address] : undefined,
+  })
+  const { data: borrowRate } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getCurrentBorrowRate',
+  })
+  const { data: utilization } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getUtilization',
   })
   const { data: vaultOwner } = useReadContract({
     address: VAULT_ADDRESS || undefined,
-    abi: vaultAbi,
-    functionName: 'owner' as never,
+    abi: vaultAbiToUse,
+    functionName: 'owner',
   })
-  const { data: tslaAllowance } = useReadContract({
-    address: TSLA_ADDRESS,
+  const tokenForAllowance = VAULT_V3_OR_V4 ? depositToken : { address: TSLA_ADDRESS }
+  const { data: tokenAllowance } = useReadContract({
+    address: (tokenForAllowance as { address: `0x${string}` }).address,
     abi: erc20Abi,
     functionName: 'allowance',
     args: address && VAULT_ADDRESS ? [address, VAULT_ADDRESS] : undefined,
@@ -143,32 +187,50 @@ function LendingVaultCard() {
   const [repayAmt, setRepayAmt] = useState('')
   const [withdrawAmt, setWithdrawAmt] = useState('')
   const [fundAmt, setFundAmt] = useState('')
+  const [simulateToken, setSimulateToken] = useState<(typeof STOCK_TOKENS)[number]>(STOCK_TOKENS[0])
+  const [simulatePrice, setSimulatePrice] = useState('')
+  const { data: tokenPrices } = useReadContracts({
+    contracts: VAULT_V4 && VAULT_ADDRESS
+      ? STOCK_TOKENS.map((t) => ({
+          address: VAULT_ADDRESS,
+          abi: vaultAbiV4,
+          functionName: 'getTokenPriceUSD' as const,
+          args: [t.address],
+        }))
+      : [],
+  })
   const { writeContract, isPending, error, data: writeTxHash } = useWriteContract()
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: writeTxHash })
 
-  const coll = collateral !== undefined ? Number(collateral) : 0
-  const loan = loanDetails ? Number(loanDetails[0]) : 0
+  const coll = VAULT_V3_OR_V4
+    ? (collateralBalancesV3?.reduce((sum, r) => sum + Number((r as { result?: bigint }).result ?? 0), 0) ?? 0)
+    : (collateral !== undefined ? Number(collateral) : 0)
+  const loan = VAULT_V3_OR_V4 && loanDebtAccrued !== undefined
+    ? Number(loanDebtAccrued)
+    : (loanDetails ? Number(loanDetails[0]) : 0)
   const hasLoan = loanDetails?.[2] === true
   const max = maxBorrow !== undefined ? Number(maxBorrow) : 0
-  const needsApproval = depositAmt && parseFloat(depositAmt) > 0 && tslaAllowance !== undefined && parseUnits(depositAmt, 18) > tslaAllowance
+  const needsApproval = depositAmt && parseFloat(depositAmt) > 0 && tokenAllowance !== undefined && parseUnits(depositAmt, 18) > tokenAllowance
 
   const handleApprove = () => {
     if (!depositAmt || parseFloat(depositAmt) <= 0) return
+    const tokenAddr = VAULT_V3_OR_V4 ? depositToken.address : TSLA_ADDRESS
     writeContract({
-      address: TSLA_ADDRESS,
+      address: tokenAddr,
       abi: erc20Abi,
       functionName: 'approve',
       args: [VAULT_ADDRESS, parseUnits(depositAmt, 18)],
     })
+    setDepositAmt('')
   }
   const handleDeposit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!depositAmt || parseFloat(depositAmt) <= 0) return
     writeContract({
       address: VAULT_ADDRESS,
-      abi: vaultAbi,
+      abi: vaultAbiToUse,
       functionName: 'depositCollateral',
-      args: [parseUnits(depositAmt, 18)],
+      args: VAULT_V3_OR_V4 ? [depositToken.address, parseUnits(depositAmt, 18)] : [parseUnits(depositAmt, 18)],
     })
     setDepositAmt('')
   }
@@ -177,7 +239,7 @@ function LendingVaultCard() {
     if (!borrowAmt || parseFloat(borrowAmt) <= 0) return
     writeContract({
       address: VAULT_ADDRESS,
-      abi: vaultAbi,
+      abi: vaultAbiToUse,
       functionName: 'takeLoan',
       args: [parseUnits(borrowAmt, 18)],
     })
@@ -188,7 +250,7 @@ function LendingVaultCard() {
     if (!repayAmt || parseFloat(repayAmt) <= 0) return
     writeContract({
       address: VAULT_ADDRESS,
-      abi: vaultAbi,
+      abi: vaultAbiToUse,
       functionName: 'repayLoan',
       value: parseUnits(repayAmt, 18),
     })
@@ -199,20 +261,31 @@ function LendingVaultCard() {
     if (!fundAmt || parseFloat(fundAmt) <= 0) return
     writeContract({
       address: VAULT_ADDRESS,
-      abi: vaultAbi,
+      abi: vaultAbiToUse,
       functionName: 'depositLendingPool',
       value: parseUnits(fundAmt, 18),
     })
     setFundAmt('')
+  }
+  const handleSimulatePrice = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!simulatePrice || parseFloat(simulatePrice) <= 0 || !mockOracles?.[simulateToken.symbol]) return
+    writeContract({
+      address: mockOracles[simulateToken.symbol] as `0x${string}`,
+      abi: mockOracleAbi,
+      functionName: 'setPrice',
+      args: [BigInt(Math.round(parseFloat(simulatePrice) * 1e8))],
+    })
+    setSimulatePrice('')
   }
   const handleWithdraw = (e: React.FormEvent) => {
     e.preventDefault()
     if (!withdrawAmt || parseFloat(withdrawAmt) <= 0) return
     writeContract({
       address: VAULT_ADDRESS,
-      abi: vaultAbi,
+      abi: vaultAbiToUse,
       functionName: 'withdrawCollateral',
-      args: [parseUnits(withdrawAmt, 18)],
+      args: VAULT_V3_OR_V4 ? [withdrawToken.address, parseUnits(withdrawAmt, 18)] : [parseUnits(withdrawAmt, 18)],
     })
     setWithdrawAmt('')
   }
@@ -220,8 +293,12 @@ function LendingVaultCard() {
   if (!VAULT_ADDRESS) return null
   return (
     <section className="card lending-card">
-      <h2>RWA Lending</h2>
-      <p className="hint">Deposit TSLA as collateral, borrow ETH (50% LTV)</p>
+      <h2>RWA Lending{VAULT_V4 ? ' V4' : VAULT_V3 ? ' V3' : ''}</h2>
+      <p className="hint">
+        {VAULT_V3_OR_V4
+          ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle-ready' : ''}`
+          : 'Deposit TSLA as collateral, borrow ETH (50% LTV)'}
+      </p>
       {vaultOwner && address?.toLowerCase() === (vaultOwner as string).toLowerCase() && (
         <form onSubmit={handleFundPool} className="lending-form fund-form">
           <label>Fund pool (owner only)</label>
@@ -239,17 +316,69 @@ function LendingVaultCard() {
       )}
       <div className="lending-stats">
         <p>Pool: {poolBal ? formatUnits(poolBal, 18).slice(0, 8) : '0'} ETH</p>
-        <p>Your collateral: {coll / 1e18} TSLA</p>
-        {hasLoan && <p className="loan-amt">Your loan: {loan / 1e18} ETH</p>}
+        {VAULT_V3_OR_V4 && borrowRate !== undefined && (
+          <p>Borrow rate: {(Number(borrowRate) / 100).toFixed(2)}% APR</p>
+        )}
+        {VAULT_V3_OR_V4 && utilization !== undefined && (
+          <p>Utilization: {(Number(utilization) / 100).toFixed(1)}%</p>
+        )}
+        <p>Your collateral: {VAULT_V3_OR_V4 ? (collateralValueUSD ? `$${(Number(collateralValueUSD) / 1e18).toFixed(0)}` : '0') : `${(coll / 1e18).toFixed(2)} TSLA`}</p>
+        {hasLoan && <p className="loan-amt">Your loan: {(loan / 1e18).toFixed(4)} ETH</p>}
         {hasLoan && healthFactor !== undefined && (
           <p className={Number(healthFactor) < 100 ? 'health-danger' : 'health-ok'}>
             Health: {Number(healthFactor) >= 100 ? 'Healthy (' + (Number(healthFactor) / 100).toFixed(0) + '%)' : '⚠️ LIQUIDATABLE'}
           </p>
         )}
-        <p>Max borrow: {max / 1e18} ETH</p>
+        <p>Max borrow: {(max / 1e18).toFixed(4)} ETH</p>
       </div>
+      {VAULT_V4 && tokenPrices && tokenPrices.length > 0 && (
+        <div className="lending-stats oracle-status">
+          <p className="oracle-label">Oracle prices (mock feeds)</p>
+          <div className="oracle-prices">
+            {STOCK_TOKENS.map((t, i) => {
+              const r = tokenPrices[i] as { result?: bigint } | undefined
+              const price = r?.result !== undefined ? Number(r.result) / 1e18 : 0
+              return <span key={t.symbol}>{t.symbol}: ${price.toFixed(0)}</span>
+            })}
+          </div>
+        </div>
+      )}
+      {VAULT_V4 && mockOracles && (
+        <form onSubmit={handleSimulatePrice} className="lending-form simulate-form">
+          <label>Simulate price change (testnet)</label>
+          <select value={simulateToken.symbol} onChange={(e) => {
+            const t = STOCK_TOKENS.find((x) => x.symbol === e.target.value)
+            if (t) setSimulateToken(t)
+          }}>
+            {STOCK_TOKENS.map((t) => (
+              <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+            ))}
+          </select>
+          <input
+            type="number"
+            placeholder="New price (USD)"
+            value={simulatePrice}
+            onChange={(e) => setSimulatePrice(e.target.value)}
+            step="any"
+            min="0"
+          />
+          <button type="submit" className="btn btn-secondary" disabled={isPending || isConfirming || !simulatePrice}>
+            Set price
+          </button>
+        </form>
+      )}
       <form onSubmit={handleDeposit} className="lending-form">
-        <label>Deposit TSLA</label>
+        <label>Deposit {VAULT_V3_OR_V4 ? 'collateral' : 'TSLA'}</label>
+        {VAULT_V3_OR_V4 && (
+          <select value={depositToken.symbol} onChange={(e) => {
+            const t = STOCK_TOKENS.find((x) => x.symbol === e.target.value)
+            if (t) setDepositToken(t)
+          }}>
+            {STOCK_TOKENS.map((t) => (
+              <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+            ))}
+          </select>
+        )}
         <input
           type="number"
           placeholder="Amount"
@@ -259,7 +388,7 @@ function LendingVaultCard() {
         />
         {needsApproval ? (
           <button type="button" className="btn btn-secondary" onClick={handleApprove} disabled={isPending}>
-            Approve TSLA
+            Approve {VAULT_V3_OR_V4 ? depositToken.symbol : 'TSLA'}
           </button>
         ) : (
           <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !depositAmt}>
@@ -295,12 +424,22 @@ function LendingVaultCard() {
           </button>
         </form>
       )}
-      {coll > 0 && !hasLoan && (
+      {(VAULT_V3_OR_V4 ? (collateralBalancesV3?.some((r) => Number((r as { result?: bigint }).result ?? 0) > 0) ?? false) : coll > 0) && !hasLoan && (
         <form onSubmit={handleWithdraw} className="lending-form">
           <label>Withdraw collateral</label>
+          {VAULT_V3_OR_V4 && (
+            <select value={withdrawToken.symbol} onChange={(e) => {
+              const t = STOCK_TOKENS.find((x) => x.symbol === e.target.value)
+              if (t) setWithdrawToken(t)
+            }}>
+              {STOCK_TOKENS.map((t) => (
+                <option key={t.symbol} value={t.symbol}>{t.symbol}</option>
+              ))}
+            </select>
+          )}
           <input
             type="number"
-            placeholder="TSLA amount"
+            placeholder={`${VAULT_V3_OR_V4 ? withdrawToken.symbol : 'TSLA'} amount`}
             value={withdrawAmt}
             onChange={(e) => setWithdrawAmt(e.target.value)}
             step="any"
