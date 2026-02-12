@@ -249,6 +249,13 @@ function LendingVaultCard() {
     abi: vaultAbiToUse,
     functionName: 'owner',
   })
+  const { data: depositTokenBalance } = useReadContract({
+    address: VAULT_V3_OR_V4 ? depositToken.address : TSLA_ADDRESS,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+  })
+  const { data: ethBalance } = useBalance({ address })
   const tokenForAllowance = VAULT_V3_OR_V4 ? depositToken : { address: TSLA_ADDRESS }
   const { data: tokenAllowance } = useReadContract({
     address: (tokenForAllowance as { address: `0x${string}` }).address,
@@ -295,6 +302,13 @@ function LendingVaultCard() {
     : (loanDetails ? Number(loanDetails[0]) : 0)
   const hasLoan = loanDetails?.[2] === true
   const max = maxBorrow !== undefined ? Number(maxBorrow) : 0
+  const borrowPreviewHF = (() => {
+    if (hasLoan || !borrowAmt || parseFloat(borrowAmt) <= 0 || !collateralValueUSD) return null
+    const debtWei = BigInt(Math.floor(parseFloat(borrowAmt) * 1e18))
+    if (debtWei === 0n) return null
+    const collValue = BigInt(Number(collateralValueUSD))
+    return Number((collValue * 10000n) / (debtWei * 125n))
+  })()
   const projectedHealthFactor = (() => {
     if (!hasLoan || !simulatePrice || parseFloat(simulatePrice) <= 0 || !VAULT_V4 || !collateralValueUSD || !collateralBalancesV3 || !tokenPrices) return null
     const simIdx = STOCK_TOKENS.findIndex((t) => t.symbol === simulateToken.symbol)
@@ -405,13 +419,20 @@ function LendingVaultCard() {
       {isVaultOwner && (
         <form onSubmit={handleFundPool} className="lending-form fund-form">
           <label>Fund pool (owner only)</label>
-          <input
-            type="number"
-            placeholder="ETH amount"
-            value={fundAmt}
-            onChange={(e) => setFundAmt(e.target.value)}
-            step="any"
-          />
+          <div className="input-with-max">
+            <input
+              type="number"
+              placeholder="ETH amount"
+              value={fundAmt}
+              onChange={(e) => setFundAmt(e.target.value)}
+              step="any"
+            />
+            {ethBalance && (
+              <button type="button" className="btn-max" onClick={() => setFundAmt(formatUnits(ethBalance.value, 18))}>
+                Max
+              </button>
+            )}
+          </div>
           <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !fundAmt}>
             Deposit ETH to pool
           </button>
@@ -423,7 +444,10 @@ function LendingVaultCard() {
           <p>Borrow rate: {(Number(borrowRate) / 100).toFixed(2)}% APR</p>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && (
-          <p>Utilization: {(Number(utilization) / 100).toFixed(1)}%</p>
+          <p className={Number(utilization) > 8000 ? 'utilization-high' : ''}>Utilization: {(Number(utilization) / 100).toFixed(1)}%</p>
+        )}
+        {VAULT_V3_OR_V4 && utilization !== undefined && Number(utilization) === 0 && poolBal && Number(poolBal) > 0 && (
+          <p className="pool-nudge">Pool underutilized — borrow to earn for lenders!</p>
         )}
         <p>Your collateral: {VAULT_V3_OR_V4 ? (collateralValueUSD ? `$${(Number(collateralValueUSD) / 1e18).toFixed(0)}` : '0') : `${(coll / 1e18).toFixed(2)} TSLA`}</p>
         {hasLoan && <p className="loan-amt">Your loan: {(loan / 1e18).toFixed(4)} ETH</p>}
@@ -497,13 +521,20 @@ function LendingVaultCard() {
             ))}
           </select>
         )}
-        <input
-          type="number"
-          placeholder="Amount"
-          value={depositAmt}
-          onChange={(e) => setDepositAmt(e.target.value)}
-          step="any"
-        />
+        <div className="input-with-max">
+          <input
+            type="number"
+            placeholder="Amount"
+            value={depositAmt}
+            onChange={(e) => setDepositAmt(e.target.value)}
+            step="any"
+          />
+          {depositTokenBalance !== undefined && (
+            <button type="button" className="btn-max" onClick={() => setDepositAmt(formatUnits(depositTokenBalance, 18))}>
+              Max
+            </button>
+          )}
+        </div>
         {needsApproval ? (
           <button type="button" className="btn btn-secondary" onClick={handleApprove} disabled={isPending}>
             Approve {VAULT_V3_OR_V4 ? depositToken.symbol : 'TSLA'}
@@ -516,13 +547,25 @@ function LendingVaultCard() {
       </form>
       <form onSubmit={handleBorrow} className="lending-form">
         <label>Borrow ETH</label>
-        <input
-          type="number"
-          placeholder="Amount"
-          value={borrowAmt}
-          onChange={(e) => setBorrowAmt(e.target.value)}
-          step="any"
-        />
+        <div className="input-with-max">
+          <input
+            type="number"
+            placeholder="Amount"
+            value={borrowAmt}
+            onChange={(e) => setBorrowAmt(e.target.value)}
+            step="any"
+          />
+          {max > 0 && (
+            <button type="button" className="btn-max" onClick={() => setBorrowAmt((max / 1e18).toString())}>
+              Max
+            </button>
+          )}
+        </div>
+        {borrowPreviewHF !== null && (
+          <p className={`borrow-preview ${borrowPreviewHF < 100 ? 'health-danger' : 'health-ok'}`}>
+            Borrowing {borrowAmt} ETH → HF: {(borrowPreviewHF / 100).toFixed(0)}% {borrowPreviewHF < 100 ? '(liquidatable)' : 'Healthy'}
+          </p>
+        )}
         <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !borrowAmt || hasLoan}>
           Borrow
         </button>
@@ -530,13 +573,18 @@ function LendingVaultCard() {
       {hasLoan && (
         <form onSubmit={handleRepay} className="lending-form">
           <label>Repay loan</label>
-          <input
-            type="number"
-            placeholder="ETH amount"
-            value={repayAmt}
-            onChange={(e) => setRepayAmt(e.target.value)}
-            step="any"
-          />
+          <div className="input-with-max">
+            <input
+              type="number"
+              placeholder="ETH amount"
+              value={repayAmt}
+              onChange={(e) => setRepayAmt(e.target.value)}
+              step="any"
+            />
+            <button type="button" className="btn-max" onClick={() => setRepayAmt((loan / 1e18).toString())}>
+              Max
+            </button>
+          </div>
           <button type="submit" className="btn btn-secondary" disabled={isPending || isConfirming || !repayAmt}>
             Repay
           </button>
@@ -555,13 +603,28 @@ function LendingVaultCard() {
               ))}
             </select>
           )}
-          <input
-            type="number"
-            placeholder={`${VAULT_V3_OR_V4 ? withdrawToken.symbol : 'TSLA'} amount`}
-            value={withdrawAmt}
-            onChange={(e) => setWithdrawAmt(e.target.value)}
-            step="any"
-          />
+          <div className="input-with-max">
+            <input
+              type="number"
+              placeholder={`${VAULT_V3_OR_V4 ? withdrawToken.symbol : 'TSLA'} amount`}
+              value={withdrawAmt}
+              onChange={(e) => setWithdrawAmt(e.target.value)}
+              step="any"
+            />
+            {VAULT_V3_OR_V4 ? (() => {
+              const idx = STOCK_TOKENS.findIndex((t) => t.symbol === withdrawToken.symbol)
+              const bal = collateralBalancesV3 && idx >= 0 ? (collateralBalancesV3[idx] as { result?: bigint })?.result : undefined
+              return bal !== undefined ? (
+                <button type="button" className="btn-max" onClick={() => setWithdrawAmt(formatUnits(bal, 18))}>
+                  Max
+                </button>
+              ) : null
+            })() : coll > 0 ? (
+              <button type="button" className="btn-max" onClick={() => setWithdrawAmt((coll / 1e18).toString())}>
+                Max
+              </button>
+            ) : null}
+          </div>
           <button type="submit" className="btn btn-secondary" disabled={isPending || isConfirming || !withdrawAmt}>
             Withdraw
           </button>
@@ -645,6 +708,17 @@ function App() {
   const { data: ethBalance } = useBalance({ address })
   const [message, setMessage] = useState('')
   const [showTransfer, setShowTransfer] = useState(false)
+  const [activeTab, setActiveTab] = useState<'vault' | 'portfolio' | 'feed'>('vault')
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem('theme')
+      return saved !== 'light'
+    } catch { return true }
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('light-mode', !darkMode)
+    try { localStorage.setItem('theme', darkMode ? 'dark' : 'light') } catch {}
+  }, [darkMode])
 
   const { data: totalMessages, refetch: refetchTotal } = useReadContract({
     address: GUESTBOOK_ADDRESS || undefined,
@@ -711,7 +785,18 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>Robinhood Chain</h1>
+        <div className="header-row">
+          <h1>Robinhood Chain</h1>
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setDarkMode((d) => !d)}
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle theme"
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
+        </div>
         <p className="subtitle">RWA Lending · Portfolio · Tokenized stocks</p>
       </header>
 
@@ -751,10 +836,13 @@ function App() {
               ))}
             </div>
             <ul className="hero-bullets">
-              <li>Multi-asset collateral · 5 stock tokens supported</li>
-              <li>Dynamic rates & oracle-ready pricing</li>
-              <li>Simulate price crashes → test liquidations</li>
+              <li><span className="bullet-icon">🔒</span> Multi-asset collateral · 5 stock tokens supported</li>
+              <li><span className="bullet-icon">📈</span> Dynamic rates & oracle-ready pricing</li>
+              <li><span className="bullet-icon">⚡</span> Simulate price crashes → test liquidations</li>
             </ul>
+            <p className="why-connect" title="Testnet uses fake tokens and ETH—no real funds at risk. Connect to try lending, borrowing, and liquidations.">
+              Why connect? <span className="why-tooltip">Testnet = no real funds at risk</span>
+            </p>
             {VAULT_ADDRESS && <DeferredVaultStats />}
             <div className="actions">
               <button onClick={addNetwork} className="btn btn-secondary">
@@ -781,7 +869,7 @@ function App() {
           </section>
         ) : (
           <>
-            <div className="wallet-bar">
+            <div className="wallet-bar sticky-bar">
               <div className="wallet-bar-left">
                 <span className="wallet-address">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
                 <span className={`network-badge ${isOnRobinhood ? 'network-ok' : 'network-wrong'}`}>
@@ -803,8 +891,15 @@ function App() {
               </div>
             </div>
 
-            {VAULT_ADDRESS && <LendingVaultCard />}
+            <nav className="tab-nav">
+              <button className={`tab ${activeTab === 'vault' ? 'tab-active' : ''}`} onClick={() => setActiveTab('vault')}>Vault</button>
+              <button className={`tab ${activeTab === 'portfolio' ? 'tab-active' : ''}`} onClick={() => setActiveTab('portfolio')}>Portfolio</button>
+              <button className={`tab ${activeTab === 'feed' ? 'tab-active' : ''}`} onClick={() => setActiveTab('feed')}>Feed</button>
+            </nav>
 
+            {activeTab === 'vault' && VAULT_ADDRESS && <LendingVaultCard />}
+
+            {activeTab === 'portfolio' && (
             <section className="card portfolio-card">
               <h2>Your portfolio</h2>
               <p className="hint">Tokenized stocks on Robinhood Chain testnet</p>
@@ -831,10 +926,12 @@ function App() {
                 <TransferPanel onClose={() => setShowTransfer(false)} />
               )}
             </section>
+            )}
 
+            {activeTab === 'feed' && (
             <section className="card guestbook-card">
               <h2>On-chain feed</h2>
-              <p className="hint">Max 280 characters · Stored forever on Robinhood Chain</p>
+              <p className="hint">Share your lending strategies or test results on-chain · Max 280 chars</p>
               <form onSubmit={handlePost} className="post-form">
                 <textarea
                   value={message}
@@ -873,6 +970,7 @@ function App() {
                 ))}
               </div>
             </section>
+            )}
           </>
         )}
       </main>

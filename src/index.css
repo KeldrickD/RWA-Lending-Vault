@@ -14,3 +14,43 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* Light mode */
+:root.light-mode .app {
+  background: linear-gradient(145deg, #f0f4f8 0%, #e2e8f0 50%, #cbd5e1 100%);
+}
+:root.light-mode .card {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+:root.light-mode .header h1,
+:root.light-mode .card h2,
+:root.light-mode .token-symbol { color: #1e293b; }
+:root.light-mode .subtitle,
+:root.light-mode .hint,
+:root.light-mode .address,
+:root.light-mode .wallet-address { color: #64748b; }
+:root.light-mode .links a { color: #0d9488; }
+:root.light-mode .links a:hover { background: rgba(13, 148, 136, 0.1); color: #0f766e; }
+:root.light-mode .btn-primary { background: #0d9488; color: #fff; }
+:root.light-mode .btn-primary:hover:not(:disabled) { background: #0f766e; }
+:root.light-mode .btn-secondary {
+  background: rgba(0, 0, 0, 0.05);
+  color: #1e293b;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+:root.light-mode .token-balance,
+:root.light-mode .stat-value,
+:root.light-mode .health-ok,
+:root.light-mode .network-ok { color: #0d9488; }
+:root.light-mode .lending-form input,
+:root.light-mode .post-form textarea {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: #1e293b;
+}
+:root.light-mode .theme-toggle {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+:root.light-mode .theme-toggle:hover { background: rgba(0, 0, 0, 0.1); }

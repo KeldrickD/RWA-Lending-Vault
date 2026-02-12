@@ -7,6 +7,21 @@
   background: linear-gradient(145deg, #0a0f1a 0%, #121a2e 50%, #0d1526 100%);
 }
 
+.header-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+}
+.theme-toggle {
+  padding: 0.4rem;
+  font-size: 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.theme-toggle:hover { background: rgba(255, 255, 255, 0.15); }
 .header {
   text-align: center;
   margin-bottom: 1.5rem;
@@ -107,6 +122,48 @@
 }
 .hero-bullets li {
   margin-bottom: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.bullet-icon { font-size: 1rem; }
+.why-connect {
+  font-size: 0.8rem;
+  color: #6b7fa3;
+  margin: 0 0 1rem !important;
+}
+.why-tooltip {
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: help;
+}
+.tab-nav {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+.tab {
+  flex: 1;
+  padding: 0.6rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #8b9dc3;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tab:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.tab-active {
+  color: #21ce99;
+  background: rgba(33, 206, 153, 0.12);
+  border-color: rgba(33, 206, 153, 0.3);
+}
+.sticky-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 .vault-stats-teaser {
   display: flex;
@@ -489,15 +546,40 @@
   color: #8b9dc3;
   margin-bottom: 0.25rem;
 }
+.input-with-max {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.input-with-max input {
+  flex: 1;
+}
+.btn-max {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #21ce99;
+  background: rgba(33, 206, 153, 0.15);
+  border: 1px solid rgba(33, 206, 153, 0.3);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-max:hover { background: rgba(33, 206, 153, 0.25); }
+.borrow-preview { font-size: 0.85rem; margin: 0.25rem 0 0.5rem !important; }
+.utilization-high { color: #ff9f43; }
+.pool-nudge { color: #21ce99; font-size: 0.85rem; font-style: italic; }
 .lending-form input {
   width: 100%;
   padding: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
   border-radius: 8px;
   border: 1px solid rgba(255,255,255,0.12);
   background: rgba(0,0,0,0.2);
   color: #fff;
 }
+.lending-form .input-with-max + .btn-primary,
+.lending-form .input-with-max + .btn-secondary { margin-top: 0.5rem; }
 
 .featured-vault {
   border-color: rgba(33, 206, 153, 0.15);
