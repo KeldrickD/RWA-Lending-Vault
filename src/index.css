@@ -9,12 +9,17 @@ body {
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background 0.3s ease;
 }
 
 #root {
   min-height: 100vh;
 }
 
+/* Light mode - smooth transition */
+.app, .card {
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+}
 /* Light mode */
 :root.light-mode .app {
   background: linear-gradient(145deg, #f0f4f8 0%, #e2e8f0 50%, #cbd5e1 100%);

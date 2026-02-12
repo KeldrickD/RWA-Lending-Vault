@@ -568,7 +568,54 @@
 .btn-max:hover { background: rgba(33, 206, 153, 0.25); }
 .borrow-preview { font-size: 0.85rem; margin: 0.25rem 0 0.5rem !important; }
 .utilization-high { color: #ff9f43; }
+.utilization-low { color: #6b7fa3; }
+.utilization-row { margin: 0.25rem 0 0.5rem; }
+.utilization-row p { margin: 0 0 0.25rem !important; }
+.util-bar {
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.util-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #21ce99, #2df5b4);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+.utilization-row.utilization-high .util-fill { background: linear-gradient(90deg, #ff9f43, #ffb366); }
 .pool-nudge { color: #21ce99; font-size: 0.85rem; font-style: italic; }
+.borrow-validation-error { color: #ff6b6b; font-size: 0.85rem; margin: 0.25rem 0 !important; }
+.input-error { border-color: #ff6b6b !important; box-shadow: 0 0 0 1px rgba(255,107,107,0.3); }
+.amount-slider {
+  width: 100%;
+  height: 6px;
+  margin: 0.5rem 0;
+  accent-color: #21ce99;
+}
+.owner-badge {
+  font-size: 0.8rem;
+  color: #6b7fa3;
+  margin: 0 0 0.75rem !important;
+}
+.feed-guideline {
+  font-size: 0.8rem;
+  color: #6b7fa3;
+  font-style: italic;
+  margin: 0 0 0.75rem !important;
+}
+.portfolio-total {
+  font-size: 0.95rem;
+  color: #8b9dc3;
+  margin: 0 0 0.75rem !important;
+}
+.portfolio-total strong { color: #21ce99; }
+.token-usd {
+  font-size: 0.85em;
+  color: #6b7fa3;
+  font-weight: 400;
+  margin-left: 0.25rem;
+}
 .lending-form input {
   width: 100%;
   padding: 0.5rem;

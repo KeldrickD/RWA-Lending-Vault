@@ -161,7 +161,7 @@ function MessageItem({ id }: { id: number }) {
   )
 }
 
-function TokenBalanceRow({ address, symbol }: { address: `0x${string}`; symbol: string }) {
+function TokenBalanceRow({ address, symbol, priceUsd }: { address: `0x${string}`; symbol: string; priceUsd?: number }) {
   const { address: userAddress } = useAccount()
   const { data } = useReadContract({
     address,
@@ -170,11 +170,75 @@ function TokenBalanceRow({ address, symbol }: { address: `0x${string}`; symbol: 
     args: userAddress ? [userAddress] : undefined,
   })
   const n = data ? parseFloat(formatUnits(data, 18)) : 0
+  const usdValue = priceUsd != null && priceUsd > 0 ? n * priceUsd : null
   return (
     <div className="token-row">
       <span className="token-symbol">{symbol}</span>
-      <span className="token-balance">{n >= 0.0001 ? (n >= 1 ? n.toFixed(2) : n.toFixed(4)) : '0'}</span>
+      <span className="token-balance">
+        {n >= 0.0001 ? (n >= 1 ? n.toFixed(2) : n.toFixed(4)) : '0'}
+        {usdValue != null && usdValue >= 0.01 && (
+          <span className="token-usd"> (${usdValue >= 1 ? usdValue.toFixed(0) : usdValue.toFixed(2)} USD)</span>
+        )}
+      </span>
     </div>
+  )
+}
+
+function PortfolioWithPrices({ ethBalance }: { ethBalance: { value: bigint } | undefined }) {
+  const { data: tokenPrices } = useReadContracts({
+    contracts: VAULT_V4 && VAULT_ADDRESS
+      ? STOCK_TOKENS.map((t) => ({
+          address: VAULT_ADDRESS,
+          abi: vaultAbiV4,
+          functionName: 'getTokenPriceUSD' as const,
+          args: [t.address],
+        }))
+      : [],
+  })
+  const prices: Record<string, number> = {}
+  if (tokenPrices?.length) {
+    STOCK_TOKENS.forEach((t, i) => {
+      const r = tokenPrices[i] as { result?: bigint } | undefined
+      if (r?.result != null) prices[t.symbol] = Number(r.result) / 1e18
+    })
+  }
+  const { address } = useAccount()
+  const stockBalances = useReadContracts({
+    contracts: address
+      ? STOCK_TOKENS.map((t) => ({
+          address: t.address,
+          abi: erc20Abi,
+          functionName: 'balanceOf' as const,
+          args: [address],
+        }))
+      : [],
+  }).data
+  const totalUsd =
+    VAULT_V4 && stockBalances
+      ? STOCK_TOKENS.reduce((sum, t, i) => {
+          const bal = stockBalances[i] as { result?: bigint } | undefined
+          const n = bal?.result ? parseFloat(formatUnits(bal.result, 18)) : 0
+          const p = prices[t.symbol] ?? 0
+          return sum + n * p
+        }, 0)
+      : 0
+  return (
+    <>
+      {totalUsd >= 0.01 && (
+        <p className="portfolio-total">Total value: <strong>${totalUsd >= 1 ? totalUsd.toFixed(0) : totalUsd.toFixed(2)} USD</strong></p>
+      )}
+      <div className="balance-section">
+        <div className="token-row">
+          <span className="token-symbol">ETH</span>
+          <span className="token-balance">{ethBalance ? formatUnits(ethBalance.value, 18).slice(0, 12) : '—'}</span>
+        </div>
+      </div>
+      <div className="balance-section">
+        {STOCK_TOKENS.map((t) => (
+          <TokenBalanceRow key={t.symbol} address={t.address} symbol={t.symbol} priceUsd={prices[t.symbol]} />
+        ))}
+      </div>
+    </>
   )
 }
 
@@ -416,6 +480,9 @@ function LendingVaultCard() {
           ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle-ready' : ''}`
           : 'Deposit TSLA as collateral, borrow ETH (50% LTV)'}
       </p>
+      {!isVaultOwner && vaultOwner && (
+        <p className="owner-badge" title="Only the vault owner can fund the lending pool">Vault owner: {String(vaultOwner).slice(0, 6)}…{String(vaultOwner).slice(-4)}</p>
+      )}
       {isVaultOwner && (
         <form onSubmit={handleFundPool} className="lending-form fund-form">
           <label>Fund pool (owner only)</label>
@@ -441,10 +508,18 @@ function LendingVaultCard() {
       <div className="lending-stats">
         <p>Pool: {poolBal ? formatUnits(poolBal, 18).slice(0, 8) : '0'} ETH</p>
         {VAULT_V3_OR_V4 && borrowRate !== undefined && (
-          <p>Borrow rate: {(Number(borrowRate) / 100).toFixed(2)}% APR</p>
+          <p>Borrow APR: {(Number(borrowRate) / 100).toFixed(2)}%</p>
+        )}
+        {VAULT_V3_OR_V4 && utilization !== undefined && borrowRate !== undefined && (
+          <p>Supply APR: {((Number(borrowRate) * Number(utilization)) / 10000).toFixed(2)}%</p>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && (
-          <p className={Number(utilization) > 8000 ? 'utilization-high' : ''}>Utilization: {(Number(utilization) / 100).toFixed(1)}%</p>
+          <div className={`utilization-row ${Number(utilization) > 8000 ? 'utilization-high' : ''}`}>
+            <p className={Number(utilization) > 8000 ? 'utilization-high' : Number(utilization) === 0 ? 'utilization-low' : ''}>
+              Utilization: {(Number(utilization) / 100).toFixed(1)}%
+            </p>
+            <div className="util-bar"><div className="util-fill" style={{ width: `${Math.min(Number(utilization) / 100, 100)}%` }} /></div>
+          </div>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && Number(utilization) === 0 && poolBal && Number(poolBal) > 0 && (
           <p className="pool-nudge">Pool underutilized — borrow to earn for lenders!</p>
@@ -554,6 +629,7 @@ function LendingVaultCard() {
             value={borrowAmt}
             onChange={(e) => setBorrowAmt(e.target.value)}
             step="any"
+            className={parseFloat(borrowAmt || '0') > max / 1e18 ? 'input-error' : ''}
           />
           {max > 0 && (
             <button type="button" className="btn-max" onClick={() => setBorrowAmt((max / 1e18).toString())}>
@@ -561,12 +637,26 @@ function LendingVaultCard() {
             </button>
           )}
         </div>
-        {borrowPreviewHF !== null && (
+        {max > 0 && parseFloat(borrowAmt || '0') > max / 1e18 && (
+          <p className="borrow-validation-error">Amount exceeds max borrow limit ({(max / 1e18).toFixed(4)} ETH)</p>
+        )}
+        {borrowPreviewHF !== null && parseFloat(borrowAmt || '0') <= max / 1e18 && (
           <p className={`borrow-preview ${borrowPreviewHF < 100 ? 'health-danger' : 'health-ok'}`}>
             Borrowing {borrowAmt} ETH → HF: {(borrowPreviewHF / 100).toFixed(0)}% {borrowPreviewHF < 100 ? '(liquidatable)' : 'Healthy'}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !borrowAmt || hasLoan}>
+        {max > 0 && (
+          <input
+            type="range"
+            min="0"
+            max={String(max / 1e18)}
+            step="0.001"
+            value={Math.min(parseFloat(borrowAmt || '0') || 0, max / 1e18)}
+            onChange={(e) => setBorrowAmt(e.target.value)}
+            className="amount-slider"
+          />
+        )}
+        <button type="submit" className="btn btn-primary" disabled={isPending || isConfirming || !borrowAmt || hasLoan || (max > 0 && parseFloat(borrowAmt || '0') > max / 1e18)}>
           Borrow
         </button>
       </form>
@@ -712,8 +802,10 @@ function App() {
   const [darkMode, setDarkMode] = useState(() => {
     try {
       const saved = localStorage.getItem('theme')
-      return saved !== 'light'
-    } catch { return true }
+      if (saved) return saved !== 'light'
+      if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) return false
+    } catch {}
+    return true
   })
   useEffect(() => {
     document.documentElement.classList.toggle('light-mode', !darkMode)
@@ -904,19 +996,7 @@ function App() {
               <h2>Your portfolio</h2>
               <p className="hint">Tokenized stocks on Robinhood Chain testnet</p>
               <div className="balances">
-                <div className="balance-section">
-                  <div className="token-row">
-                    <span className="token-symbol">ETH</span>
-                    <span className="token-balance">
-                      {ethBalance ? formatUnits(ethBalance.value, 18).slice(0, 12) : '—'}
-                    </span>
-                  </div>
-                </div>
-                <div className="balance-section">
-                  {STOCK_TOKENS.map((t) => (
-                    <TokenBalanceRow key={t.symbol} address={t.address} symbol={t.symbol} />
-                  ))}
-                </div>
+                <PortfolioWithPrices ethBalance={ethBalance} />
               </div>
               {!showTransfer ? (
                 <button onClick={() => setShowTransfer(true)} className="btn btn-secondary">
@@ -932,6 +1012,7 @@ function App() {
             <section className="card guestbook-card">
               <h2>On-chain feed</h2>
               <p className="hint">Share your lending strategies or test results on-chain · Max 280 chars</p>
+              <p className="feed-guideline">Posts stored forever—keep it lending-related!</p>
               <form onSubmit={handlePost} className="post-form">
                 <textarea
                   value={message}
