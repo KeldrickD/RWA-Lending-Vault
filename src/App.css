@@ -1,0 +1,365 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem;
+  background: linear-gradient(145deg, #0a0f1a 0%, #121a2e 50%, #0d1526 100%);
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.header h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.subtitle {
+  color: #8b9dc3;
+  font-size: 1rem;
+  margin: 0.25rem 0 0;
+}
+
+.links {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.links a {
+  color: #21ce99;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.links a:hover {
+  background: rgba(33, 206, 153, 0.15);
+  color: #2df5b4;
+}
+
+.main {
+  width: 100%;
+  max-width: 480px;
+}
+
+.card {
+  background: rgba(18, 26, 46, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.card h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 0.75rem;
+}
+
+.card h3 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #8b9dc3;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 1rem 0 0.5rem;
+}
+
+.card h3:first-of-type {
+  margin-top: 0;
+}
+
+.connect-card p,
+.wallet-card p {
+  color: #8b9dc3;
+  font-size: 0.9rem;
+  margin: 0 0 1rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.wallet-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.btn-primary {
+  background: #21ce99;
+  color: #0a0f1a;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #2df5b4;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #8b9dc3;
+  font-size: 0.85rem;
+}
+
+.btn-ghost:hover {
+  color: #fff;
+}
+
+.wallet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.address {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  color: #8b9dc3;
+  margin: 0 0 1rem !important;
+}
+
+.balances {
+  margin-top: 0.5rem;
+}
+
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.token-row:last-of-type {
+  border-bottom: none;
+}
+
+.token-symbol {
+  font-weight: 600;
+  color: #fff;
+}
+
+.token-balance {
+  font-family: ui-monospace, monospace;
+  color: #21ce99;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: #6b7fa3;
+  margin: 0 0 0.75rem !important;
+  line-height: 1.5;
+}
+
+.code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #8b9dc3;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.deploy-card p {
+  color: #8b9dc3;
+  margin-bottom: 0.75rem;
+}
+
+.post-form {
+  margin-top: 0.5rem;
+}
+
+.post-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font-size: 1rem;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.post-form textarea:focus {
+  outline: none;
+  border-color: #21ce99;
+}
+
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.char-count {
+  font-size: 0.8rem;
+  color: #6b7fa3;
+}
+
+.error {
+  color: #ff6b6b;
+  font-size: 0.85rem;
+  margin: 0.5rem 0 0;
+}
+
+.tx-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.balance {
+  color: #8b9dc3;
+  font-size: 0.9rem;
+  margin: 0 0 1rem !important;
+}
+
+.message-list {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.75rem;
+}
+
+.message-item {
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.message-content {
+  margin: 0 0 0.5rem;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.message-meta {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #6b7fa3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.author-portfolio {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: #21ce99;
+}
+
+.author-portfolio span {
+  background: rgba(33, 206, 153, 0.15);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.transfer-panel {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.transfer-panel h3 {
+  margin: 0 0 0.75rem;
+}
+
+.transfer-panel select,
+.transfer-panel input {
+  width: 100%;
+  padding: 0.6rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
+.transfer-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.lending-card .lending-stats {
+  font-size: 0.9rem;
+  color: #8b9dc3;
+  margin-bottom: 1rem;
+}
+.lending-card .lending-stats p { margin: 0.25rem 0; }
+.lending-card .loan-amt { color: #ff9f43; }
+.lending-card .health-ok { color: #21ce99; }
+.lending-card .health-danger { color: #ff6b6b; font-weight: 600; }
+.lending-form {
+  margin-bottom: 1rem;
+}
+.lending-form label {
+  display: block;
+  font-size: 0.8rem;
+  color: #8b9dc3;
+  margin-bottom: 0.25rem;
+}
+.lending-form input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: 2rem;
+}
+
+.footer p {
+  color: #4a5a7a;
+  font-size: 0.8rem;
+  margin: 0;
+}
