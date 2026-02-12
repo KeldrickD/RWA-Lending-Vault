@@ -39,6 +39,19 @@ const GUESTBOOK_ADDRESS = (deployed.guestbookAddress || '') as `0x${string}`
 const VAULT_ADDRESS = (deployed.vaultAddress || '') as `0x${string}`
 const TSLA_ADDRESS = STOCK_TOKENS.find((t) => t.symbol === 'TSLA')!.address
 
+function formatAmount(n: number, decimals = 4): string {
+  if (n >= 1000) return n.toFixed(0)
+  if (n >= 1) return n.toFixed(Math.min(decimals, 2))
+  if (n >= 0.0001) return n.toFixed(4)
+  return n > 0 ? n.toFixed(6) : '0'
+}
+
+function getHFClass(hf: number): string {
+  if (hf < 125) return 'health-danger'
+  if (hf < 150) return 'health-warning'
+  return 'health-ok'
+}
+
 function DeferredVaultStats() {
   const [ready, setReady] = useState(false)
   useEffect(() => {
@@ -474,14 +487,19 @@ function LendingVaultCard() {
   if (!VAULT_ADDRESS) return null
   return (
     <section className="card lending-card featured-vault">
-      <h2>RWA Lending{VAULT_V4 ? ' V4' : VAULT_V3 ? ' V3' : ''}</h2>
+      <h2>RWA Lending{VAULT_V4 ? ' V4 · Oracle-Ready' : VAULT_V3 ? ' V3' : VAULT_V2 ? ' V2' : ''}</h2>
       <p className="hint">
         {VAULT_V3_OR_V4
-          ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle-ready' : ''}`
+          ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle feeds' : ''}`
           : 'Deposit TSLA as collateral, borrow ETH (50% LTV)'}
       </p>
       {!isVaultOwner && vaultOwner && (
         <p className="owner-badge" title="Only the vault owner can fund the lending pool">Vault owner: {String(vaultOwner).slice(0, 6)}…{String(vaultOwner).slice(-4)}</p>
+      )}
+      {!isVaultOwner && VAULT_V3_OR_V4 && (
+        <p className="lender-note" title="Lenders earn Supply APR from borrower interest">
+          Lending pool is owner-funded on testnet — public supply coming in future version.
+        </p>
       )}
       {isVaultOwner && (
         <form onSubmit={handleFundPool} className="lending-form fund-form">
@@ -506,12 +524,14 @@ function LendingVaultCard() {
         </form>
       )}
       <div className="lending-stats">
-        <p>Pool: {poolBal ? formatUnits(poolBal, 18).slice(0, 8) : '0'} ETH</p>
+        <p>Pool: {poolBal ? formatAmount(parseFloat(formatUnits(poolBal, 18))) : '0'} ETH</p>
         {VAULT_V3_OR_V4 && borrowRate !== undefined && (
           <p>Borrow APR: {(Number(borrowRate) / 100).toFixed(2)}%</p>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && borrowRate !== undefined && (
-          <p>Supply APR: {((Number(borrowRate) * Number(utilization)) / 10000).toFixed(2)}%</p>
+          <p className="supply-apr-row" title={Number(utilization) === 0 ? 'Increases with utilization—supply now to position early!' : ''}>
+            Supply APR: {((Number(borrowRate) * Number(utilization)) / 10000).toFixed(2)}% <span className="supply-apr-hint">(for ETH lenders)</span>
+          </p>
         )}
         {VAULT_V3_OR_V4 && utilization !== undefined && (
           <div className={`utilization-row ${Number(utilization) > 8000 ? 'utilization-high' : ''}`}>
@@ -524,14 +544,16 @@ function LendingVaultCard() {
         {VAULT_V3_OR_V4 && utilization !== undefined && Number(utilization) === 0 && poolBal && Number(poolBal) > 0 && (
           <p className="pool-nudge">Pool underutilized — borrow to earn for lenders!</p>
         )}
-        <p>Your collateral: {VAULT_V3_OR_V4 ? (collateralValueUSD ? `$${(Number(collateralValueUSD) / 1e18).toFixed(0)}` : '0') : `${(coll / 1e18).toFixed(2)} TSLA`}</p>
-        {hasLoan && <p className="loan-amt">Your loan: {(loan / 1e18).toFixed(4)} ETH</p>}
+        <p>Your collateral: {VAULT_V3_OR_V4 ? (collateralValueUSD ? `~$${formatAmount(Number(collateralValueUSD) / 1e18)}` : '0') : `${formatAmount(coll / 1e18)} TSLA`}</p>
+        {hasLoan && <p className="loan-amt">Your loan: {formatAmount(loan / 1e18)} ETH</p>}
         {hasLoan && healthFactor !== undefined && (
-          <p className={Number(healthFactor) < 100 ? 'health-danger' : 'health-ok'}>
-            Health: {Number(healthFactor) >= 100 ? 'Healthy (' + (Number(healthFactor) / 100).toFixed(0) + '%)' : '⚠️ LIQUIDATABLE'}
+          <p className={getHFClass(Number(healthFactor))}>
+            <span className="hf-icon">{Number(healthFactor) >= 125 ? '🛡' : '⚠️'}</span>
+            Health: {Number(healthFactor) >= 100 ? (Number(healthFactor) / 100).toFixed(1) + '%' : 'LIQUIDATABLE'}
+            {Number(healthFactor) >= 100 && Number(healthFactor) < 125 && ' · At risk'}
           </p>
         )}
-        <p>Max borrow: {(max / 1e18).toFixed(4)} ETH</p>
+        <p>Max borrow: {formatAmount(max / 1e18)} ETH</p>
       </div>
       {VAULT_V4 && tokenPrices && tokenPrices.length > 0 && (
         <div className="lending-stats oracle-status">
@@ -577,9 +599,10 @@ function LendingVaultCard() {
             Set price
           </button>
           {projectedHealthFactor !== null && (
-            <p className={`projected-hf ${projectedHealthFactor < 100 ? 'health-danger' : 'health-ok'}`}>
-              If {simulateToken.symbol} → ${simulatePrice}: HF = {(projectedHealthFactor / 100).toFixed(0)}%
+            <p className={`projected-hf ${getHFClass(projectedHealthFactor)}`}>
+              If {simulateToken.symbol} → ${simulatePrice}: HF = {(projectedHealthFactor / 100).toFixed(1)}%
               {projectedHealthFactor < 100 && ' (liquidatable)'}
+              {projectedHealthFactor >= 100 && projectedHealthFactor < 125 && ' · At risk'}
             </p>
           )}
         </form>
@@ -638,11 +661,13 @@ function LendingVaultCard() {
           )}
         </div>
         {max > 0 && parseFloat(borrowAmt || '0') > max / 1e18 && (
-          <p className="borrow-validation-error">Amount exceeds max borrow limit ({(max / 1e18).toFixed(4)} ETH)</p>
+          <p className="borrow-validation-error">Exceeds max borrow limit ({formatAmount(max / 1e18)} ETH)</p>
         )}
         {borrowPreviewHF !== null && parseFloat(borrowAmt || '0') <= max / 1e18 && (
-          <p className={`borrow-preview ${borrowPreviewHF < 100 ? 'health-danger' : 'health-ok'}`}>
-            Borrowing {borrowAmt} ETH → HF: {(borrowPreviewHF / 100).toFixed(0)}% {borrowPreviewHF < 100 ? '(liquidatable)' : 'Healthy'}
+          <p className={`borrow-preview ${getHFClass(borrowPreviewHF)}`}>
+            <span className="hf-icon">{borrowPreviewHF >= 125 ? '🛡' : '⚠️'}</span>
+            Borrowing {borrowAmt} ETH → HF: {(borrowPreviewHF / 100).toFixed(1)}%
+            {borrowPreviewHF < 100 ? ' (liquidatable)' : borrowPreviewHF < 125 ? ' · At risk if price drops' : ' Healthy'}
           </p>
         )}
         {max > 0 && (
@@ -984,9 +1009,9 @@ function App() {
             </div>
 
             <nav className="tab-nav">
-              <button className={`tab ${activeTab === 'vault' ? 'tab-active' : ''}`} onClick={() => setActiveTab('vault')}>Vault</button>
-              <button className={`tab ${activeTab === 'portfolio' ? 'tab-active' : ''}`} onClick={() => setActiveTab('portfolio')}>Portfolio</button>
-              <button className={`tab ${activeTab === 'feed' ? 'tab-active' : ''}`} onClick={() => setActiveTab('feed')}>Feed</button>
+              <button className={`tab ${activeTab === 'vault' ? 'tab-active' : ''}`} onClick={() => setActiveTab('vault')} title="Vault">🏦 Vault</button>
+              <button className={`tab ${activeTab === 'portfolio' ? 'tab-active' : ''}`} onClick={() => setActiveTab('portfolio')} title="Portfolio">👛 Portfolio</button>
+              <button className={`tab ${activeTab === 'feed' ? 'tab-active' : ''}`} onClick={() => setActiveTab('feed')} title="Feed">💬 Feed</button>
             </nav>
 
             {activeTab === 'vault' && VAULT_ADDRESS && <LendingVaultCard />}
@@ -1023,7 +1048,7 @@ function App() {
                   disabled={!isOnRobinhood || isWritePending || isConfirming}
                 />
                 <div className="form-footer">
-                  <span className="char-count">{message.length}/280</span>
+                  <span className={`char-count ${message.length > 250 ? 'char-count-warn' : ''}`}>{message.length}/280</span>
                   <button
                     type="submit"
                     className="btn btn-primary"
@@ -1044,7 +1069,7 @@ function App() {
                   View transaction →
                 </a>
               )}
-              <h3>{total} message{total !== 1 ? 's' : ''} on-chain</h3>
+              <h3>{total === 0 ? 'Be the first to post a lending tip!' : `${total} message${total !== 1 ? 's' : ''} on-chain`}</h3>
               <div className="message-list">
                 {Array.from({ length: total }, (_, i) => (
                   <MessageItem key={i} id={i} />
