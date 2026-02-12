@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   useAccount,
   useBalance,
+  useBlock,
   useConnect,
   useDisconnect,
   useSwitchChain,
@@ -37,6 +38,79 @@ import './App.css'
 const GUESTBOOK_ADDRESS = (deployed.guestbookAddress || '') as `0x${string}`
 const VAULT_ADDRESS = (deployed.vaultAddress || '') as `0x${string}`
 const TSLA_ADDRESS = STOCK_TOKENS.find((t) => t.symbol === 'TSLA')!.address
+
+function DeferredVaultStats() {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const id = setTimeout(() => setReady(true), 100)
+    return () => clearTimeout(id)
+  }, [])
+  return ready ? <VaultStatsTeaser /> : <div className="vault-stats-teaser vault-stats-skeleton"><span className="stat-value">Loading...</span></div>
+}
+
+function VaultStatsTeaser() {
+  const { data: poolBal } = useReadContract({
+    address: VAULT_ADDRESS || undefined,
+    abi: vaultAbiToUse,
+    functionName: 'poolBalance',
+  })
+  const { data: borrowRate } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getCurrentBorrowRate',
+  })
+  const { data: utilization } = useReadContract({
+    address: VAULT_ADDRESS && VAULT_V3_OR_V4 ? VAULT_ADDRESS : undefined,
+    abi: vaultAbiToUse,
+    functionName: 'getUtilization',
+  })
+  if (!VAULT_ADDRESS) return null
+  return (
+    <div className="vault-stats-teaser">
+      <div className="stat">
+        <span className="stat-label">Pool TVL</span>
+        <span className="stat-value">{poolBal ? formatUnits(poolBal, 18).slice(0, 8) : '—'} ETH</span>
+      </div>
+      {borrowRate !== undefined && (
+        <div className="stat">
+          <span className="stat-label">Borrow APR</span>
+          <span className="stat-value">{(Number(borrowRate) / 100).toFixed(2)}%</span>
+        </div>
+      )}
+      {utilization !== undefined && (
+        <div className="stat">
+          <span className="stat-label">Utilization</span>
+          <span className="stat-value">{(Number(utilization) / 100).toFixed(1)}%</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function HowItWorks() {
+  const steps = [
+    { icon: '📥', label: 'Deposit', desc: 'Add TSLA, AMZN, PLTR, NFLX or AMD as collateral' },
+    { icon: '💰', label: 'Borrow', desc: 'Get ETH up to 50% LTV with dynamic interest rates' },
+    { icon: '📊', label: 'Monitor', desc: 'Track health factor & oracle prices in real time' },
+    { icon: '⚡', label: 'Liquidate', desc: 'Simulate price crashes or liquidate underwater positions' },
+  ]
+  return (
+    <div className="how-it-works">
+      <h3>How it works</h3>
+      <div className="steps">
+        {steps.map((s, i) => (
+          <div key={i} className="step">
+            <span className="step-icon">{s.icon}</span>
+            <div className="step-content">
+              <strong>{s.label}</strong>
+              <span>{s.desc}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function AuthorPortfolio({ address }: { address: `0x${string}` }) {
   const { data: ethBal } = useBalance({ address })
@@ -199,6 +273,17 @@ function LendingVaultCard() {
         }))
       : [],
   })
+  const { data: block } = useBlock()
+  const { data: mockUpdatedAts } = useReadContracts({
+    contracts: VAULT_V4 && mockOracles
+      ? STOCK_TOKENS.map((t) => ({
+          address: mockOracles[t.symbol] as `0x${string}`,
+          abi: mockOracleAbi,
+          functionName: 'updatedAt' as const,
+        }))
+      : [],
+  })
+  const isVaultOwner = vaultOwner && address?.toLowerCase() === (vaultOwner as string).toLowerCase()
   const { writeContract, isPending, error, data: writeTxHash } = useWriteContract()
   const { isLoading: isConfirming } = useWaitForTransactionReceipt({ hash: writeTxHash })
 
@@ -210,6 +295,24 @@ function LendingVaultCard() {
     : (loanDetails ? Number(loanDetails[0]) : 0)
   const hasLoan = loanDetails?.[2] === true
   const max = maxBorrow !== undefined ? Number(maxBorrow) : 0
+  const projectedHealthFactor = (() => {
+    if (!hasLoan || !simulatePrice || parseFloat(simulatePrice) <= 0 || !VAULT_V4 || !collateralValueUSD || !collateralBalancesV3 || !tokenPrices) return null
+    const simIdx = STOCK_TOKENS.findIndex((t) => t.symbol === simulateToken.symbol)
+    if (simIdx < 0) return null
+    const balR = collateralBalancesV3[simIdx] as { result?: bigint } | undefined
+    const priceR = tokenPrices[simIdx] as { result?: bigint } | undefined
+    if (!balR?.result || !priceR?.result) return null
+    const bal = balR.result
+    const oldPrice = priceR.result
+    const newPrice = BigInt(Math.floor(parseFloat(simulatePrice) * 1e18))
+    const currentColl = BigInt(Number(collateralValueUSD))
+    const oldTokenVal = (bal * oldPrice) / BigInt(1e18)
+    const newTokenVal = (bal * newPrice) / BigInt(1e18)
+    const projectedColl = currentColl - oldTokenVal + newTokenVal
+    const debt = BigInt(Math.ceil(loan))
+    if (debt === 0n) return null
+    return Number((projectedColl * 10000n) / (debt * 125n))
+  })()
   const needsApproval = depositAmt && parseFloat(depositAmt) > 0 && tokenAllowance !== undefined && parseUnits(depositAmt, 18) > tokenAllowance
 
   const handleApprove = () => {
@@ -292,14 +395,14 @@ function LendingVaultCard() {
 
   if (!VAULT_ADDRESS) return null
   return (
-    <section className="card lending-card">
+    <section className="card lending-card featured-vault">
       <h2>RWA Lending{VAULT_V4 ? ' V4' : VAULT_V3 ? ' V3' : ''}</h2>
       <p className="hint">
         {VAULT_V3_OR_V4
           ? `Deposit any supported stock (TSLA, AMZN, PLTR, NFLX, AMD) · Dynamic rates${VAULT_V4 ? ' · Oracle-ready' : ''}`
           : 'Deposit TSLA as collateral, borrow ETH (50% LTV)'}
       </p>
-      {vaultOwner && address?.toLowerCase() === (vaultOwner as string).toLowerCase() && (
+      {isVaultOwner && (
         <form onSubmit={handleFundPool} className="lending-form fund-form">
           <label>Fund pool (owner only)</label>
           <input
@@ -333,19 +436,28 @@ function LendingVaultCard() {
       </div>
       {VAULT_V4 && tokenPrices && tokenPrices.length > 0 && (
         <div className="lending-stats oracle-status">
-          <p className="oracle-label">Oracle prices (mock feeds)</p>
+          <p className="oracle-label">Oracle status (mock feeds)</p>
           <div className="oracle-prices">
             {STOCK_TOKENS.map((t, i) => {
               const r = tokenPrices[i] as { result?: bigint } | undefined
               const price = r?.result !== undefined ? Number(r.result) / 1e18 : 0
-              return <span key={t.symbol}>{t.symbol}: ${price.toFixed(0)}</span>
+              const updatedAtR = mockUpdatedAts?.[i] as { result?: bigint } | undefined
+              const updatedAt = updatedAtR?.result !== undefined ? Number(updatedAtR.result) : 0
+              const blockTs = block?.timestamp != null ? Number(block.timestamp) : 0
+              const isStale = blockTs > 0 && updatedAt > 0 && (blockTs - updatedAt) > 3600
+              const status = isStale ? 'Stale' : 'Active'
+              return (
+                <span key={t.symbol} className={isStale ? 'oracle-stale' : ''} title={isStale ? 'Price >1hr old, fallback to 1:1' : ''}>
+                  {t.symbol}: ${price.toFixed(0)} <small>({status})</small>
+                </span>
+              )
             })}
           </div>
         </div>
       )}
-      {VAULT_V4 && mockOracles && (
+      {VAULT_V4 && mockOracles && isVaultOwner && (
         <form onSubmit={handleSimulatePrice} className="lending-form simulate-form">
-          <label>Simulate price change (testnet)</label>
+          <label>Simulate price change (owner only)</label>
           <select value={simulateToken.symbol} onChange={(e) => {
             const t = STOCK_TOKENS.find((x) => x.symbol === e.target.value)
             if (t) setSimulateToken(t)
@@ -365,6 +477,12 @@ function LendingVaultCard() {
           <button type="submit" className="btn btn-secondary" disabled={isPending || isConfirming || !simulatePrice}>
             Set price
           </button>
+          {projectedHealthFactor !== null && (
+            <p className={`projected-hf ${projectedHealthFactor < 100 ? 'health-danger' : 'health-ok'}`}>
+              If {simulateToken.symbol} → ${simulatePrice}: HF = {(projectedHealthFactor / 100).toFixed(0)}%
+              {projectedHealthFactor < 100 && ' (liquidatable)'}
+            </p>
+          )}
         </form>
       )}
       <form onSubmit={handleDeposit} className="lending-form">
@@ -622,9 +740,22 @@ function App() {
             </pre>
           </section>
         ) : !isConnected ? (
-          <section className="card connect-card">
-            <h2>Get Started</h2>
-            <p>Connect your wallet to post on-chain messages</p>
+          <section className="card connect-card hero-card">
+            <h2>Test RWA Lending on Robinhood Chain</h2>
+            <p className="hero-copy">
+              Connect your wallet to lend/borrow against tokenized stocks (TSLA, AMZN, PLTR, NFLX, AMD). Deposit collateral → Borrow ETH → Simulate liquidations.
+            </p>
+            <div className="token-badges">
+              {STOCK_TOKENS.map((t) => (
+                <span key={t.symbol} className="token-badge">{t.symbol}</span>
+              ))}
+            </div>
+            <ul className="hero-bullets">
+              <li>Multi-asset collateral · 5 stock tokens supported</li>
+              <li>Dynamic rates & oracle-ready pricing</li>
+              <li>Simulate price crashes → test liquidations</li>
+            </ul>
+            {VAULT_ADDRESS && <DeferredVaultStats />}
             <div className="actions">
               <button onClick={addNetwork} className="btn btn-secondary">
                 Add Robinhood Chain
@@ -646,28 +777,31 @@ function App() {
                 </button>
               </div>
             </div>
+            <HowItWorks />
           </section>
         ) : (
           <>
-            <section className="card wallet-card">
-              <div className="wallet-header">
-                <h2>Connected</h2>
-                <button onClick={() => disconnect()} className="btn btn-ghost">
+            <div className="wallet-bar">
+              <div className="wallet-bar-left">
+                <span className="wallet-address">{address?.slice(0, 6)}…{address?.slice(-4)}</span>
+                <span className={`network-badge ${isOnRobinhood ? 'network-ok' : 'network-wrong'}`}>
+                  {isOnRobinhood ? '✓ Robinhood Chain' : 'Wrong network'}
+                </span>
+              </div>
+              <div className="wallet-bar-right">
+                {!isOnRobinhood && (
+                  <button
+                    onClick={() => switchChain({ chainId: robinhoodChain.id })}
+                    className="btn btn-primary btn-sm"
+                  >
+                    Switch chain
+                  </button>
+                )}
+                <button onClick={() => disconnect()} className="btn btn-ghost btn-sm">
                   Disconnect
                 </button>
               </div>
-              <p className="address">
-                {address?.slice(0, 6)}…{address?.slice(-4)}
-              </p>
-              {!isOnRobinhood && (
-                <button
-                  onClick={() => switchChain({ chainId: robinhoodChain.id })}
-                  className="btn btn-primary"
-                >
-                  Switch to Robinhood Chain
-                </button>
-              )}
-            </section>
+            </div>
 
             {VAULT_ADDRESS && <LendingVaultCard />}
 

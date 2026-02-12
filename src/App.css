@@ -48,7 +48,7 @@
 
 .main {
   width: 100%;
-  max-width: 480px;
+  max-width: 540px;
 }
 
 .card {
@@ -79,6 +79,146 @@
   margin-top: 0;
 }
 
+.hero-copy {
+  color: #8b9dc3;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 0 1rem !important;
+}
+.token-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.token-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #21ce99;
+  background: rgba(33, 206, 153, 0.12);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+}
+.hero-bullets {
+  color: #6b7fa3;
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem 1.25rem;
+  padding: 0;
+}
+.hero-bullets li {
+  margin-bottom: 0.35rem;
+}
+.vault-stats-teaser {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.vault-stats-teaser .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.vault-stats-teaser .stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #6b7fa3;
+}
+.vault-stats-teaser .stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #21ce99;
+}
+.vault-stats-skeleton .stat-value {
+  color: #6b7fa3;
+  font-weight: 500;
+}
+.how-it-works {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.how-it-works h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7fa3;
+  margin: 0 0 0.75rem !important;
+}
+.how-it-works .steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.how-it-works .step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.how-it-works .step-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.how-it-works .step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.how-it-works .step-content strong {
+  color: #fff;
+  font-size: 0.9rem;
+}
+.how-it-works .step-content span {
+  color: #6b7fa3;
+  font-size: 0.8rem;
+}
+.wallet-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: rgba(18, 26, 46, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+.wallet-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.wallet-address {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  color: #8b9dc3;
+}
+.network-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+}
+.network-ok {
+  background: rgba(33, 206, 153, 0.2);
+  color: #21ce99;
+}
+.network-wrong {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+}
+.wallet-bar-right {
+  display: flex;
+  gap: 0.5rem;
+}
+.btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
 .connect-card p,
 .wallet-card p {
   color: #8b9dc3;
@@ -337,6 +477,9 @@
 .lending-card .oracle-status { margin-top: 0.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); }
 .lending-card .oracle-label { font-size: 0.75rem; text-transform: uppercase; color: #6b7fa3; margin-bottom: 0.35rem !important; }
 .lending-card .oracle-prices { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; font-size: 0.85rem; }
+.lending-card .oracle-stale { color: #ff9f43; }
+.lending-card .oracle-prices small { opacity: 0.85; }
+.lending-card .projected-hf { font-size: 0.85rem; margin: 0.5rem 0 0 !important; }
 .lending-form {
   margin-bottom: 1rem;
 }
@@ -356,9 +499,35 @@
   color: #fff;
 }
 
+.featured-vault {
+  border-color: rgba(33, 206, 153, 0.15);
+  box-shadow: 0 0 0 1px rgba(33, 206, 153, 0.08);
+}
+.card {
+  animation: fadeIn 0.4s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0.6; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.btn {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
 .footer {
   margin-top: auto;
   padding-top: 2rem;
+}
+@media (max-width: 480px) {
+  .app { padding: 1rem; }
+  .header h1 { font-size: 1.75rem; }
+  .wallet-bar { flex-direction: column; align-items: flex-start; }
+  .vault-stats-teaser { flex-direction: column; }
 }
 
 .footer p {

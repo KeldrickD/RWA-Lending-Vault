@@ -7,6 +7,13 @@ export const mockOracleAbi = [
     type: 'function',
   },
   {
+    inputs: [],
+    name: 'updatedAt',
+    outputs: [{ name: '', type: 'uint256', internalType: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
     inputs: [{ name: '_price', type: 'int256', internalType: 'int256' }],
     name: 'setPrice',
     outputs: [],
